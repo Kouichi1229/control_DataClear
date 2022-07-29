@@ -5,39 +5,49 @@ import streamlit as st
 from io import  StringIO
 from strsimpy.jaro_winkler import JaroWinkler
 from regex_data import *
+from time import sleep
+from stqdm import stqdm
+import time
 
-stop_words = ["THE","AND"] # 去掉無意義的詞
-replace_dt=pd.read_csv("./CompanyReplaceWords.csv") # 取代的詞彙
+take_out_type=['INCORPORATED',
+ 'CORPORATION',
+ 'CORP.',
+ 'CORP',
+ 'INC',
+ 'INC.',
+ '& CO.',
+ 'CO.',
+ 'CO',
+ 'CO.,',
+ 'COMPANY',
+ 'KABUSHIKI KAISHA',
+ 'KABUSHIKI', 'KAISHA',
+ 'KK',
+ 'K.K.',
+ 'K.K',
+ 'PTY. LTD.',
+ 'PTY LTD',
+ 'LTD',
+ 'L.T.D.',
+ 'LTD.',
+ 'LIMITED',
+ 'LLC',
+ 'L.L.C.',
+ "THE","AND"]
+#replace_dt=pd.read_csv("./CompanyReplaceWords.csv") # 取代的詞彙
 jarowinkler = JaroWinkler()
 
 #參數
 encoding='utf-8-sig'
 
 #資料庫資料正規化
-regex_dataBD()
+#regex_dataDB()
+regex_sigle_db()
+
 #讀取資料庫正規化資料
-db_regex = pd.read_csv('./Control_db_Regex.csv',encoding=encoding)
+db_regex = pd.read_csv('./Single_db_regex.csv',encoding=encoding)
 #db_regex.columns  Assignee_Name,AC,Assignee_Name_regex,AC_regex
 
-just_regex_db= db_regex[["Assignee_Name_regex","AC"]]
-just_regex_db.drop_duplicates()
-
-#資料庫字典
-dic_1={} #Assignee&AC
-#dic_2={} #Assignee_regex&AC
-#dic_3={} #AC_regex&AC
-
-for i in range(0,len(db_regex["AC"])):
-    dic_1[db_regex["Assignee_Name"][i]]=db_regex["AC"][i]
-    #dic_2[db_regex["Assignee_Name_regex"][i]]=db_regex["AC"][i]
-    #dic_3[db_regex["AC_regex"][i]]=db_regex["AC"][i]
-
-
-#正規化資料庫
-dic_2={}
-
-for i in range(0,len(just_regex_db['AC'])):
-    dic_2[just_regex_db["Assignee_Name_regex"][i]]=just_regex_db['AC'][i]
 
 uploaded_file = st.file_uploader("清選擇清洗目標比對檔案 CSV檔")
 if uploaded_file is not None:
@@ -65,75 +75,61 @@ if uploaded_file is not None:
 
      st.write('你的比對欄位', dataframe[option]) #option type str
      #比對欄位正規化
+     if st.button('開始比對'):
 
-     #先對應資料庫裡有的欄位
-
-     dataframe["AC"] = dataframe[option].map(dic_1)
-     #原本是NULL的填入
-     for i in range(0,len(dataframe[option])):
-        if dataframe[option][i]=='NULL':
-            dataframe['AC'][i]=dataframe[option][i]
+        with st.spinner('比對中請稍後...'):
+            
             
 
-     #判斷資料裡是否有null
-     if dataframe['AC'].isnull().sum()>0:
-        
-        if st.button('沒有對應到的資料'):
-            st.write("共有"+str(dataframe['AC'].isnull().sum())+"筆",dataframe[dataframe.isnull().T.any()]) 
-
-            #未比對的正規化
-            dataframe["Assignee_regex"]=dataframe[option].astype(str).str.upper()
+            dataframe[str(option)+'regex']=dataframe[option].str.upper()
+            dataframe[str(option)+'regex']=dataframe[str(option)+'regex'].apply(lambda words:' '.join(word.upper() for word in str(words).split() if word not in take_out_type))
+            dataframe[str(option)+'regex']=dataframe[str(option)+'regex'].replace('[^A-Za-z0-9]+','',regex=True)
+            dataframe[str(option)+'regex']=dataframe[str(option)+'regex'].replace(' ','',regex=True)
      
-    
-            for i in range(0,len(replace_dt['Replace'])):
-                dataframe["Assignee_regex"]=dataframe["Assignee_regex"].astype(str).str.replace(replace_dt['Replace'][i],replace_dt['Replace Words'][i],regex=True)
-        
-                dataframe["Assignee_regex"]=dataframe["Assignee_regex"].apply(lambda words:' '.join(word.upper() for word in words.split() if word not in stop_words))
-        
-                dataframe["Assignee_regex"]=dataframe["Assignee_regex"].replace('[^A-Za-z0-9]+','',regex=True)
-        
-                dataframe["Assignee_regex"]=dataframe["Assignee_regex"].replace(' ','',regex=True)
+            list_vlue=[]#存入相似度數值
+            ac_list=[]#存入權控值
+            close_list=[]#存取最接近權控值
+            similar_list=[]#存入最大相似度
+            my_bar = st.progress(0)
+            for percent_complete in range(100):
+                 for i in range(0,len(dataframe[option])):
+                     for j in range(0,len(db_regex['AC_regex'])):
+                         similar=jarowinkler.similarity(str(dataframe[str(option)+'regex'][i]), str(db_regex['AC_regex'][j]))
+                         list_vlue.append(similar)
+                     if max(list_vlue) >=0.95:
+                         index=list_vlue.index(max(list_vlue)) #最大相似度的位置
+                         ac_list.append(db_regex['AC'][index]) #存入資料庫裡最大相似度的值
+                         close_list.append(db_regex['AC'][index])
+                         similar_list.append(max(list_vlue))
+                         list_vlue.clear()#離開後清除所有值
+                     else:
+                         index=list_vlue.index(max(list_vlue))
+                         ac_list.append(str(dataframe[option][i]).title()) #存入自己的值 並用title的方式存入
+                         close_list.append(db_regex['AC'][index])
+                         similar_list.append(max(list_vlue))
+                         list_vlue.clear()
+                     time.sleep(0.1)
+                     my_bar.progress(percent_complete + 1)
+        #stqdm.pandas()
 
-            dataframe['AC']=dataframe['Assignee_regex'].map(dic_2)
-
-            st.subheader("正規化後配對")
-            st.write(dataframe[dataframe.isnull().T.any()],"剩下"+str(dataframe['AC'].isnull().sum())+"筆") 
-
-            if dataframe['AC'].isnull().sum() >0:
-                st.subheader("Jaro-Winkler 模糊比對 填入資料")        
-
-                compare_dt = dataframe[dataframe.isnull().T.any()]
-                for i in range(0,len(compare_dt['AC'])):
-                    for j in range(0,len(just_regex_db['AC'])):
-                        similar=jarowinkler.similarity(compare_dt['Assignee_regex'].iloc[i], just_regex_db['Assignee_Name_regex'][j])
-                        #st.write(compare_dt['Assignee_regex'].iloc[i],just_regex_db['Assignee_Name_regex'][j],similar)
-                        if similar >= 0.90:
-                            index = compare_dt['AC'].index[0]
-                            dataframe['AC'][index]=just_regex_db['AC'][j]
-                        else:
-                            index = compare_dt['AC'].index[0]
-                            #insert_db=pd.read_csv("./Control_db.csv",encoding=encoding)
-                            #insert_db.append(dataframe[option][index],dataframe[option][index].str.title())
-
-                            #st.write(index,type(index),dataframe['AC'][index],type(dataframe['AC'][index]))
+            dataframe['AC']=pd.Series(ac_list)
+            dataframe['Closest']=pd.Series(close_list)
+            dataframe['Similarity'] = pd.Series(similar_list)
+            time.sleep(5)
+            st.success('比對完成，請下載')
                 
-                st.write(dataframe[[option,'AC']])
-            
-     
+            @st.cache
+            def convert_df(df):
+            # IMPORTANT: Cache the conversion to prevent computation on every rerun
+                return df.to_csv().encode(encoding)
 
-    #st.write(null_df)
-    #  for i in range(0,len(null_df['AC'])):
-    #     for j in range(0,len(db_regex['AC'])):
-    #         #st.write(db_regex['Assignee_Name_regex'][j],type(db_regex['Assignee_Name_regex'][j]))
-    #         similar=jarowinkler.similarity(null_df['Assignee_regex'].iloc[i], db_regex['Assignee_Name_regex'][j])
-    #         #st.write(similar)
-    #         if similar >=0.95:
-    #             index=null_df['AC'].index[0]
-    #             dataframe['AC'][index]=db_regex['AC'][j]
-    #         else:
-    #             index=null_df['AC'].index[0]
-    #             dataframe['AC'][index]=dataframe[option][index].title()
-     
-    #  null_df2=dataframe[dataframe.isnull().T.any()]
-     #st.write("共有"+str(len(null_df2['AC']))+"筆",null_df2[[option,'AC']])
-     #st.write(dataframe)
+            csv = convert_df(dataframe)
+
+            st.download_button(
+                label="Download data as CSV",
+                data=csv,
+                file_name='比對完後權控.csv',
+                mime='text/csv',
+                )
+    
+       

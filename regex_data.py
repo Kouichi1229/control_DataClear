@@ -1,12 +1,51 @@
 import pandas as pd
 
+take_out_type=['INCORPORATED',
+ 'CORPORATION',
+ 'CORP.',
+ 'CORP',
+ 'INC',
+ 'INC.',
+ '& CO.',
+ 'CO.',
+ 'CO',
+ 'CO.,',
+ 'COMPANY',
+ 'KABUSHIKI KAISHA',
+ 'KABUSHIKI', 'KAISHA',
+ 'KK',
+ 'K.K.',
+ 'K.K',
+ 'PTY. LTD.',
+ 'PTY LTD',
+ 'LTD',
+ 'L.T.D.',
+ 'LTD.',
+ 'LIMITED',
+ 'LLC',
+ 'L.L.C.',
+ "THE","AND"]
 stop_words = ["THE","AND"] # 去掉無意義的詞
 replace_dt=pd.read_csv("./CompanyReplaceWords.csv") # 取代的詞彙
+
 
 #權控表正規化
 encoding = 'utf-8-sig'
 
-def regex_dataBD():
+
+def regex_sigle_db():
+    dt=pd.read_csv('./Single_db.csv',encoding=encoding)
+    dt['AC_regex']=dt['AC'].str.upper()
+
+    #dt['AC_rgex']=dt['AC_rgex'].apply(lambda words:' '.join(word.upper() for word in words.split() if word not in stop_words))
+    dt['AC_regex']=dt['AC_regex'].apply(lambda words:' '.join(word.upper() for word in words.split() if word not in take_out_type))
+    dt['AC_regex']=dt['AC_regex'].replace('[^A-Za-z0-9]+','',regex=True)
+    dt['AC_regex']=dt['AC_regex'].replace(' ','',regex=True)
+
+    dt.to_csv('Single_db_regex.csv',encoding=encoding)
+
+
+def regex_dataDB():
     dt=pd.read_csv("./Control_db.csv",encoding=encoding)
     dt['Assignee_Name_regex']=dt['Assignee_Name'].str.upper()
     dt['AC_regex']=dt['AC'].str.upper()
