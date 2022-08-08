@@ -1,0 +1,11 @@
+altair
+pandas
+streamlit
+sklearn
+matplotlib
+numpy
+xlrd
+openpyxl
+seaborn
+strsimpy
+Unidecode
